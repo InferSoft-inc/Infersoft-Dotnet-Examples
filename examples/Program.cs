@@ -87,7 +87,27 @@ namespace Examples
             ) ?? throw new Exception("Budget response was null.");
             // Display whole estimate response
             Console.WriteLine($"Estimated credits for job: {creditsEstimate.TotalCredits} over {creditsEstimate.PageCount} pages. ID for Estimate {creditsEstimate.Id}");
+            // Create a project to run this job under
+            var projectResponse = await PostJsonAsync<CreateProjectRequest, CreateProjectResponse>(
+                apiClient,
+                "projects",
+                new CreateProjectRequest { Name = "Example Project from C# SDK" }
+            ) ?? throw new Exception("Project creation failed.");
+            // Finally we can submit the job with the budget ID
+            var startJobResponse = await PostJsonAsync<StartJobsRequest, StartJobsResponse>(
+                apiClient,
+                "jobs/start",
+                new StartJobsRequest
+                {
+                    CreditsId = creditsEstimate.Id,
+                    ProjectId = projectResponse.Id
+                }
+            ) ?? throw new Exception("Job start response was null.");
+            //TODO: Poll for job completion and fetch results
+            Console.WriteLine($"Started job with ID: {startJobResponse.Id}");
         }
+
+
 
         // ----------------------------------------------------
         //              Helper Methods
