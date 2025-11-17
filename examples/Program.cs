@@ -1,27 +1,36 @@
-﻿using Examples.Model;
+﻿using examples.Model;
+using Examples.Model;
 using System.Net.Http;
-using System.Text;
+using System.Net.Http.Json;
 using System.Text.Json;
+
 namespace Examples
 {
     internal class Program
     {
+        private const string Auth0BaseUrl = "https://dev-noabnisxxguu0jp0.us.auth0.com";
+        private const string ApiBaseUrl = "https://api.infersoft.com/api/";
+
         static async Task Main(string[] args)
         {
+            using var authClient = new HttpClient { BaseAddress = new Uri(Auth0BaseUrl) };
+            using var apiClient = new HttpClient { BaseAddress = new Uri(ApiBaseUrl) };
 
-            HttpClient httpClient = new HttpClient();
-            var token = await GetCredentials(httpClient);
-            if (token == null) {
+            // Get your authentication token
+            var token = await GetAccessTokenAsync(authClient);
+            if (token == null)
+            {
                 throw new Exception("Failed to get authentication token.");
             }
+
             // Set up
-            httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-            httpClient.BaseAddress = new Uri("https://api.infersoft.com/api/");
+            apiClient.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
             // Let's upload some files
             // We need to know their names and sizes ahead of time
             // In the repository we have 3 pdfs
             // We start by fetching the presigned URL from Infersoft API
-
             var pdfFiles = new List<string>
             {
                 "docs/file1.pdf",
@@ -30,46 +39,61 @@ namespace Examples
             };
 
             var uploadRequest = BuildUploadRequestFromFiles(pdfFiles);
-            var uploadRequestJson = JsonSerializer.Serialize(uploadRequest);
-            var uploadContent = new StringContent(uploadRequestJson, Encoding.UTF8, new System.Net.Http.Headers.MediaTypeHeaderValue("application/json"));
+
             // Make the request to get presigned URLs
-            HttpResponseMessage uploadResponseMessage = await httpClient.PostAsync("uploads", uploadContent);
-            uploadResponseMessage.EnsureSuccessStatusCode();
-            var responseJson = await uploadResponseMessage.Content.ReadAsStringAsync();
-            var uploadResponse = JsonSerializer.Deserialize<UploadResponse>(
-                responseJson,
-                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }
-            );
+            var uploadResponse = await PostJsonAsync<UploadRequest, UploadResponse>(apiClient, "uploads", uploadRequest);
+            if (uploadResponse == null || uploadResponse.Items.Count != pdfFiles.Count)
+                throw new Exception("Upload response is invalid or does not match the number of files.");
+
             // Now we have the presigned URLs and the names of the files that will be uploaded
             // We can proceed to upload each file to its corresponding presigned URL
             // In here we have to inject the required headers returned by the API
-            for ( int i = 0; i < pdfFiles.Count; i++)
+            for (int i = 0; i < pdfFiles.Count; i++)
             {
                 var pdfFile = pdfFiles[i];
                 var uploadItem = uploadResponse.Items[i];
-                // Insert required headers into client
-                httpClient.DefaultRequestHeaders.Clear();
-                foreach (var header in uploadItem.RequiredHeaders)
-                {
-                    httpClient.DefaultRequestHeaders.Add(header.Key, header.Value);
-                }
 
                 Console.WriteLine($"Uploading {pdfFile} to {uploadItem.PutUrl}");
+
                 await UploadFileAsync(
-                    httpClient,
                     uploadItem.PutUrl,
                     pdfFile,
-                    new string[] {
-                        "Content-Type: application/pdf"
-                    }
+                    uploadItem.RequiredHeaders
                 );
+
                 Console.WriteLine($"Uploaded {pdfFile} successfully.");
             }
-            // All files uploaded, let's send these files to classify and extract
 
+            // All files uploaded, let's send these files to classify and extract
+            // We'll use a NameSelector here but the API will improve in the future
+            // We need to get credits estimate before sending the job
+            // Then we can approve and send the job with the proposed budget ID
+            var selectors = uploadResponse.Items
+                .Select(i => new NameSelector { Name = i.ClientFileName })
+                .ToArray();
+
+            var budgetRequest = new EstimateCreditsRequest
+            {
+                Prompts = new[] { 1, 2, 3, 4 },
+                Selectors = selectors,
+                Steps = new[] { "classify", "extract" },
+                Synchronous = false
+            };
+
+            var creditsEstimate = await PostJsonAsync<EstimateCreditsRequest, EstimateCreditsResponse>(
+                apiClient,
+                "job/credits/estimate",
+                budgetRequest
+            ) ?? throw new Exception("Budget response was null.");
+            // Display whole estimate response
+            Console.WriteLine($"Estimated credits for job: {creditsEstimate.TotalCredits} over {creditsEstimate.PageCount} pages. ID for Estimate {creditsEstimate.Id}");
         }
 
-        private async static Task<string?> GetCredentials(HttpClient httpClient)
+        // ----------------------------------------------------
+        //              Helper Methods
+        // ----------------------------------------------------
+
+        private static async Task<string?> GetAccessTokenAsync(HttpClient client)
         {
             // Get your authentication token
             var clientId = Environment.GetEnvironmentVariable("AUTH0_CLIENT_ID");
@@ -80,7 +104,7 @@ namespace Examples
                 Console.WriteLine("Missing AUTH0_CLIENT_ID or AUTH0_CLIENT_SECRET environment variables.");
                 return null;
             }
-            httpClient.BaseAddress = new Uri("https://dev-noabnisxxguu0jp0.us.auth0.com");
+
             var requestBody = new
             {
                 grant_type = "client_credentials",
@@ -88,41 +112,60 @@ namespace Examples
                 client_secret = clientSecret,
                 audience = "https://api.infersoft.com"
             };
-            var json = JsonSerializer.Serialize(requestBody);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-
-            var response = await httpClient.PostAsync("/oauth/token", content);
+            var response = await client.PostAsJsonAsync("/oauth/token", requestBody);
             response.EnsureSuccessStatusCode();
-            var responseString = await response.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(responseString);
-            var token = doc.RootElement.GetProperty("access_token").GetString();
-            return token;
-        }
-        private async static Task UploadFileAsync(HttpClient client, string presignedUrl, string filePath, string[] headers)
-        {
 
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            return doc.RootElement.GetProperty("access_token").GetString();
+        }
+
+        /// <summary>
+        /// Generic helper to POST JSON and parse JSON response.
+        /// Avoids repetitive boilerplate everywhere.
+        /// </summary>
+        private static async Task<TResponse?> PostJsonAsync<TRequest, TResponse>(
+            HttpClient client,
+            string url,
+            TRequest body)
+        {
+            var response = await client.PostAsJsonAsync(url, body);
+            response.EnsureSuccessStatusCode();
+
+            return await response.Content.ReadFromJsonAsync<TResponse>(
+                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }
+            );
+        }
+
+        /// <summary>
+        /// Uploads a file directly to a presigned URL.
+        /// Injects required headers returned by the API.
+        /// </summary>
+        private static async Task UploadFileAsync(
+            string presignedUrl,
+            string filePath,
+            IDictionary<string, string> requiredHeaders)
+        {
             byte[] fileBytes = await File.ReadAllBytesAsync(filePath);
 
             using var content = new ByteArrayContent(fileBytes);
-            foreach (var header in headers)
-            {
-                var splitHeader = header.Split(':');
-                if (splitHeader.Length == 2)
-                {
-                    content.Headers.Add(splitHeader[0].Trim(), splitHeader[1].Trim());
-                }
-            }
+            content.Headers.Add("Content-Type", "application/pdf");
+
             using var request = new HttpRequestMessage(HttpMethod.Put, presignedUrl)
             {
                 Content = content
             };
 
-            using HttpResponseMessage response = await client.SendAsync(request);
+            // Insert required headers into the request
+            foreach (var header in requiredHeaders)
+                request.Headers.TryAddWithoutValidation(header.Key, header.Value);
+
+            using var uploadClient = new HttpClient();
+            var response = await uploadClient.SendAsync(request);
 
             if (!response.IsSuccessStatusCode)
             {
-                string respBody = await response.Content.ReadAsStringAsync();
+                var respBody = await response.Content.ReadAsStringAsync();
                 throw new Exception($"Upload failed. Status: {response.StatusCode}, Body: {respBody}");
             }
         }
@@ -141,6 +184,5 @@ namespace Examples
 
             return uploadRequest;
         }
-
     }
 }
