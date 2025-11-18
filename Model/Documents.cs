@@ -1,13 +1,8 @@
-namespace examples.Model
+using System;
+using System.Collections.Generic;
 
-
-
-
-
+namespace Examples.Model
 {
-    using System;
-    using System.Collections.Generic;
-
     public class DocumentsSearchRequest
     {
         public string OrderBy { get; set; }
