@@ -68,9 +68,13 @@ namespace Examples
             // We'll use a NameSelector here but the API will improve in the future
             // We need to get credits estimate before sending the job
             // Then we can approve and send the job with the proposed budget ID
-            var selectors = uploadResponse.Items
+            var nameSelectors = uploadResponse.Items
                 .Select(i => new NameSelector { Name = i.ClientFileName })
                 .ToArray();
+            var selectors = new Selectors
+            {
+                Include = nameSelectors
+            };
 
             var budgetRequest = new EstimateCreditsRequest
             {
@@ -103,8 +107,50 @@ namespace Examples
                     ProjectId = projectResponse.Id
                 }
             ) ?? throw new Exception("Job start response was null.");
-            //TODO: Poll for job completion and fetch results
             Console.WriteLine($"Started job with ID: {startJobResponse.Id}");
+            // Poll for the job status until it's completed using the GET /jobs/{id} endpoint
+            // It answers with the same model as the StartJobsResponse so we can reuse the class
+            while (true)
+            {
+                Console.WriteLine("Waiting 5 minutes before polling job status...");
+                await Task.Delay(5 * 60 * 1000); // 5 minutes
+                var jobStatusResponse = await apiClient.GetFromJsonAsync<StartJobsResponse>($"jobs/{startJobResponse.Id}");
+                if (jobStatusResponse == null)
+                    throw new Exception("Failed to get job status.");
+                Console.WriteLine($"Job Status: {jobStatusResponse.Status}");
+                if (jobStatusResponse.Status == "completed")
+                    break;
+                Console.WriteLine("Job not completed yet, continuing to poll...");
+            }
+            // Let's retrieve all the results and save them to disk
+            // Saving classifier results and extraction results separately
+            var documentsResponse = await PostJsonAsync<DocumentsSearchRequest, DocumentsSearchResponse> (
+                apiClient,
+                "documents/search",
+                new DocumentsSearchRequest
+                {
+                    Selectors = selectors
+                }
+            );
+            await File.WriteAllTextAsync("classifier_results.json", JsonSerializer.Serialize(documentsResponse, new JsonSerializerOptions { WriteIndented = true }));
+            // Extraction results
+            var projectSelector = new Selectors
+            {
+                Include = new List<IDocumentSelector>
+                {
+                    new ProjectSelector { ProjectId = projectResponse.Id }
+                }
+            };
+            var extractionsResponse = await PostJsonAsync<ExtractionResponse>(
+                apiClient,
+                "documents/extraction_results/search",
+                new DocumentsSearchRequest
+                {
+                    Selectors = projectSelector
+                }
+            );
+            await File.WriteAllTextAsync("extraction_results.json", JsonSerializer.Serialize(extractionsResponse, new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine("Saved classifier_results.json and extraction_results.json to disk.");
         }
 
 
