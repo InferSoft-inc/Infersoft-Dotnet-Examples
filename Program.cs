@@ -1,4 +1,5 @@
-﻿using Examples.Model;
+﻿using DotNetEnv;
+using Examples.Model;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -12,6 +13,8 @@ namespace Examples
 
         static async Task Main(string[] args)
         {
+            TryLoadDotEnv();
+
             using var authClient = new HttpClient { BaseAddress = new Uri(Auth0BaseUrl) };
             using var apiClient = new HttpClient { BaseAddress = new Uri(ApiBaseUrl) };
 
@@ -289,6 +292,23 @@ namespace Examples
             };
 
             return uploadRequest;
+        }
+
+        private static void TryLoadDotEnv()
+        {
+            try
+            {
+                // Traverse upward so running from subdirectories still finds the repo-level .env
+                Env.TraversePath().Load(".env");
+            }
+            catch (FileNotFoundException)
+            {
+                // Silently continue if no .env is present; environment variables may already be set.
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Warning: failed to load .env file. {ex.Message}");
+            }
         }
     }
 }
