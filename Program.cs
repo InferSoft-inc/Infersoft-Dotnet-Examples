@@ -15,12 +15,16 @@ namespace Examples
             using var authClient = new HttpClient { BaseAddress = new Uri(Auth0BaseUrl) };
             using var apiClient = new HttpClient { BaseAddress = new Uri(ApiBaseUrl) };
 
+            Console.WriteLine("Starting Infersoft end-to-end workflow demo...");
+
             // Get your authentication token
+            Console.WriteLine("Requesting Auth0 access token...");
             var token = await GetAccessTokenAsync(authClient);
             if (token == null)
             {
                 throw new Exception("Failed to get authentication token.");
             }
+            Console.WriteLine("Authentication succeeded. Configuring API client.");
 
             // Set up
             apiClient.DefaultRequestHeaders.Authorization =
@@ -37,12 +41,15 @@ namespace Examples
                 "docs/doc_3.pdf"
             };
 
+            Console.WriteLine("Preparing upload request for local PDF samples...");
             var uploadRequest = BuildUploadRequestFromFiles(pdfFiles);
 
             // Make the request to get presigned URLs
+            Console.WriteLine("Requesting presigned URLs from Infersoft API...");
             var uploadResponse = await PostJsonAsync<UploadRequest, UploadResponse>(apiClient, "uploads", uploadRequest);
             if (uploadResponse == null || uploadResponse.Items.Count != pdfFiles.Count)
                 throw new Exception("Upload response is invalid or does not match the number of files.");
+            Console.WriteLine("Received presigned URLs. Beginning uploads.");
 
             // Now we have the presigned URLs and the names of the files that will be uploaded
             // We can proceed to upload each file to its corresponding presigned URL
@@ -70,6 +77,7 @@ namespace Examples
             var nameSelectors = uploadResponse.Items
                 .Select(i => new NameSelector { Name = i.ClientFileName })
                 .ToArray();
+            Console.WriteLine("Building selectors from uploaded filenames...");
             var selectors = new Selectors
             {
                 Include = nameSelectors
@@ -83,6 +91,7 @@ namespace Examples
                 Synchronous = false
             };
 
+            Console.WriteLine("Requesting credit estimate for classify/extract steps...");
             var creditsEstimate = await PostJsonAsync<EstimateCreditsRequest, EstimateCreditsResponse>(
                 apiClient,
                 "job/credits/estimate",
@@ -91,12 +100,14 @@ namespace Examples
             // Display whole estimate response
             Console.WriteLine($"Estimated credits for job: {creditsEstimate.TotalCredits} over {creditsEstimate.PageCount} pages. ID for Estimate {creditsEstimate.Id}");
             // Create a project to run this job under
+            Console.WriteLine("Creating example project to host this job...");
             var projectResponse = await PostJsonAsync<CreateProjectRequest, CreateProjectResponse>(
                 apiClient,
                 "projects",
                 new CreateProjectRequest { Name = "Example Project from C# SDK" }
             ) ?? throw new Exception("Project creation failed.");
             // Finally we can submit the job with the budget ID
+            Console.WriteLine("Starting job with approved budget and project...");
             var startJobResponse = await PostJsonAsync<StartJobsRequest, StartJobsResponse>(
                 apiClient,
                 "jobs/start",
@@ -109,6 +120,7 @@ namespace Examples
             Console.WriteLine($"Started job with ID: {startJobResponse.Id}");
             // Poll for the job status until it's completed using the GET /jobs/{id} endpoint
             // It answers with the same model as the StartJobsResponse so we can reuse the class
+            Console.WriteLine("Monitoring job status until completion...");
             while (true)
             {
                 Console.WriteLine("Waiting 5 minutes before polling job status...");
@@ -124,6 +136,7 @@ namespace Examples
             }
             // Let's retrieve all the results and save them to disk
             // Saving classifier results and extraction results separately
+            Console.WriteLine("Querying classifier results for the uploaded documents...");
             var documentsResponse = await PostJsonAsync<DocumentsSearchRequest, DocumentsSearchResponse>(
                 apiClient,
                 "documents/search",
@@ -134,6 +147,7 @@ namespace Examples
             );
             await File.WriteAllTextAsync("classifier_results.json", JsonSerializer.Serialize(documentsResponse, new JsonSerializerOptions { WriteIndented = true }));
             // Extraction results
+            Console.WriteLine("Querying extraction results scoped to the newly created project...");
             var extractionsResponse = await PostJsonAsync<DocumentsSearchRequest, ExtractionResponse>(
                 apiClient,
                 "documents/extraction_results/search",
@@ -152,6 +166,7 @@ namespace Examples
             Console.WriteLine("Saved classifier_results.json and extraction_results.json to disk.");
 
             // Optional: dry-run a bulk delete to show which documents would be removed
+            Console.WriteLine("Preparing dry-run bulk delete to preview cleanup...");
             var bulkDeleteRequest = new DocumentBulkDeleteRequest
             {
                 Selectors = new Selectors
@@ -171,6 +186,7 @@ namespace Examples
             );
             Console.WriteLine($"Bulk delete dry-run matched {bulkDeleteResponse.Matched} documents (dryRun={bulkDeleteResponse.DryRun}).");
             // Now we can delete the documents
+            Console.WriteLine("Executing actual bulk delete to remove processed documents...");
             bulkDeleteRequest.DryRun = false;
             bulkDeleteResponse = await PostJsonAsync<DocumentBulkDeleteRequest, DocumentBulkDeleteResponse>(
                 apiClient,
