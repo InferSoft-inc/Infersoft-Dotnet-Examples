@@ -155,7 +155,7 @@ namespace Examples
                 {
                     Selectors = new Selectors
                     {
-                        Include = new List<Selector>
+                        Include = new Selector[]
                         {
                             new ProjectSelector { ProjectId = projectResponse.Id }
                         }
