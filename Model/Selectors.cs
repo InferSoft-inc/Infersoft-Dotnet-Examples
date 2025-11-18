@@ -1,24 +1,24 @@
 ﻿namespace Examples.Model
 {
-    public class Selectors
+    internal class Selectors
     {
         public Selector[] Exclude { get; set; } = Array.Empty<Selector>();
         public Selector[] Include { get; set; } = Array.Empty<Selector>();
     }
-    public abstract class Selector
+    internal abstract class Selector
     {
         public abstract string Type { get; }
     }
 
-    public sealed class NameSelector : Selector
+    internal sealed class NameSelector : Selector
     {
         public override string Type => "nameSelector";
         public required string Name { get; set; }
     }
 
-    public sealed class IdSelector : Selector
+    internal sealed class ProjectSelector: Selector
     {
-        public override string Type => "idSelector";
-        public required int Id { get; set; }
+        public override string Type => "projectSelector";
+        public required int ProjectId { get; set; }
     }
 }

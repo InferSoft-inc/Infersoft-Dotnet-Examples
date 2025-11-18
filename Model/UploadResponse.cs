@@ -1,11 +1,11 @@
 namespace Examples.Model
 {
-    public class UploadResponse
+    internal class UploadResponse
     {
         public List<UploadItem> Items { get; set; } = new();
     }
 
-    public class UploadItem
+    internal class UploadItem
     {
         public string ClientFileName { get; set; } = string.Empty;
         public string Error { get; set; } = string.Empty;

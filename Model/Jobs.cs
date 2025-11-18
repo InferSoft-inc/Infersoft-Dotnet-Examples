@@ -1,4 +1,4 @@
-namespace examples.Model
+namespace Examples.Model
 {
     internal class StartJobsRequest
     {

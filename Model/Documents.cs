@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Examples.Model
 {
-    public class DocumentsSearchRequest
+    internal class DocumentsSearchRequest
     {
         public string OrderBy { get; set; }
         public string OrderDir { get; set; }
@@ -19,7 +19,6 @@ namespace Examples.Model
         public int Page { get; set; }
         public int PageSize { get; set; }
     }
-    public class DocumentListResponse
 
     internal class DocumentItem
     {

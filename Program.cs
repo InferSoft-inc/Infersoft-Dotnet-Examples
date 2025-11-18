@@ -1,5 +1,4 @@
-﻿using examples.Model;
-using Examples.Model;
+﻿using Examples.Model;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -33,9 +32,9 @@ namespace Examples
             // We start by fetching the presigned URL from Infersoft API
             var pdfFiles = new List<string>
             {
-                "docs/file1.pdf",
-                "docs/file2.pdf",
-                "docs/file3.pdf"
+                "docs/doc_1.pdf",
+                "docs/doc_2.pdf",
+                "docs/doc_3.pdf"
             };
 
             var uploadRequest = BuildUploadRequestFromFiles(pdfFiles);
@@ -124,7 +123,7 @@ namespace Examples
             }
             // Let's retrieve all the results and save them to disk
             // Saving classifier results and extraction results separately
-            var documentsResponse = await PostJsonAsync<DocumentsSearchRequest, DocumentsSearchResponse> (
+            var documentsResponse = await PostJsonAsync<DocumentsSearchRequest, DocumentsSearchResponse>(
                 apiClient,
                 "documents/search",
                 new DocumentsSearchRequest
@@ -134,19 +133,18 @@ namespace Examples
             );
             await File.WriteAllTextAsync("classifier_results.json", JsonSerializer.Serialize(documentsResponse, new JsonSerializerOptions { WriteIndented = true }));
             // Extraction results
-            var projectSelector = new Selectors
-            {
-                Include = new List<IDocumentSelector>
-                {
-                    new ProjectSelector { ProjectId = projectResponse.Id }
-                }
-            };
-            var extractionsResponse = await PostJsonAsync<ExtractionResponse>(
+            var extractionsResponse = await PostJsonAsync<DocumentsSearchRequest, ExtractionResponse>(
                 apiClient,
                 "documents/extraction_results/search",
                 new DocumentsSearchRequest
                 {
-                    Selectors = projectSelector
+                    Selectors = new Selectors
+                    {
+                        Include = new List<Selector>
+                        {
+                            new ProjectSelector { ProjectId = projectResponse.Id }
+                        }
+                    }
                 }
             );
             await File.WriteAllTextAsync("extraction_results.json", JsonSerializer.Serialize(extractionsResponse, new JsonSerializerOptions { WriteIndented = true }));
