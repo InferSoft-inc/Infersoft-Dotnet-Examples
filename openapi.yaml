@@ -1,0 +1,1290 @@
+openapi: 3.0.3
+info:
+  title: Infersoft REST API
+  version: "1.0.0"
+servers:
+  - url: https://api.infersoft.com
+
+paths:
+  /api/uploads:
+    post:
+      summary: Plan batch uploads (single-part, via CloudFront URL)
+      security:
+        - oauth2: [files:upload]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchUploadRequest"
+      responses:
+        "200":
+          description: Planned upload URLs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchUploadResponse"
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "413":
+          description: Payload too large
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /api/documents/search:
+    post:
+      summary: Query documents by selectors (paged)
+      description: >
+        If `selectors` is omitted, or both `selectors.include` and `selectors.exclude`
+        are present but empty, **no filters** are applied (all documents in the org),
+        subject to pagination.
+      security:
+        - oauth2: [documents:read]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentQueryRequest"
+      responses:
+        "200":
+          description: Documents page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentQueryResponse"
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { description: Unauthorized }
+        "403": { description: Forbidden }
+
+  /api/documents/{id}:
+    get:
+      summary: Get a document by ID
+      security:
+        - oauth2: [documents:read]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Document
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DocumentSummary" }
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { description: Unauthorized }
+        "403": { description: Forbidden }
+        "404":
+          description: Not found
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
+    delete:
+      summary: Delete a document by ID
+      description: >
+        Permanently deletes the document and its associated data
+        (e.g., derived records, extractions, and workflows).
+      security:
+        - oauth2: [documents:write]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "204":
+          description: Document deleted
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { description: Unauthorized }
+        "403": { description: Forbidden }
+        "404":
+          description: Not found
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+          
+  /api/documents/bulk_delete:
+    post:
+      summary: Delete documents matching selectors (bulk)
+      description: >
+        Deletes all documents that match the provided `selectors`. This operation
+        is **destructive** and SHOULD be used with care.
+
+        Operation is rejected if no selectors are provided
+      security:
+        - oauth2: [documents:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentBulkDeleteRequest"
+      responses:
+        "200":
+          description: Bulk delete result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentBulkDeleteResponse"
+        "400":
+          description: Bad request (e.g., unsafe selector set)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { description: Unauthorized }
+        "403": { description: Forbidden }
+                      
+
+  /api/projects:
+    post:
+      summary: Create a project
+      security: [ { oauth2: [projects:write] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectCreateRequest" }
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { description: Unauthorized }
+        "403": { description: Forbidden }
+
+  /api/projects/search:
+    post:
+      summary: Query projects (fuzzy by name, paged)
+      security: [ { oauth2: [projects:read] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectQueryRequest" }
+      responses:
+        "200":
+          description: Projects page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectQueryResponse" }
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { description: Unauthorized }
+        "403": { description: Forbidden }
+
+  /api/projects/{id}:
+    get:
+      summary: Get a project by ID
+      security: [ { oauth2: [projects:read] } ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Project
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { description: Unauthorized }
+        "403": { description: Forbidden }
+        "404":
+          description: Not found
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }    
+
+  /api/projects/assign-documents:
+    post:
+      summary: Assign documents to a project (create a new project when projectName is provided)
+      description: >
+        `selectors` uses the same structure as document search. If both lists are empty,
+        servers MAY treat it as a no-op (assign 0 documents).
+      security: [ { oauth2: [projects:write, documents:read] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                project_id:   { type: integer, minimum: 1, description: "Attach to this existing project" }
+                project_name: { type: string, minLength: 1, maxLength: 255, description: "Always create a new project with this name" }
+                selectors:
+                  $ref: "#/components/schemas/Selectors"
+              oneOf:
+                - required: [project_id, selectors]
+                - required: [project_name, selectors]
+      responses:
+        "200":
+          description: Assignment result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssignDocumentsResponse"
+        "400": { description: Bad request, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" }}}}
+        "401": { description: Unauthorized }
+        "403": { description: Forbidden }
+        "404": { description: Project not found when projectId is provided, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" }}}}
+
+  /api/prompts/search:
+    post:
+      summary: Query prompts (org-owned + global), paged
+      description: >
+        Returns extractor prompts.
+        Excludes deleted prompts unless `includeDeleted` is true.
+      security: [ { oauth2: [prompts:read] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PromptQueryRequest" }
+      responses:
+        "200":
+          description: Prompts page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PromptQueryResponse" }
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { description: Unauthorized }
+        "403": { description: Forbidden }
+
+  /api/jobs/credits/estimate:
+    post:
+      summary: Estimate credits for a workflow request (no job creation)
+      security:
+        - oauth2: [jobs:write, documents:read, projects:read, prompts:read]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreditsEstimateRequest"
+      responses:
+        "200":
+          description: Credits estimate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreditsEstimateResponse"
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { description: Unauthorized }
+        "403": { description: Forbidden }
+        "500": { description: Internal server error }
+
+  /api/jobs/start:
+    post:
+      summary: Start a workflow job
+      security:
+        - oauth2: [jobs:write, documents:read, projects:read, prompts:read]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartJobRequest"
+      responses:
+        "201":
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { description: Unauthorized }
+        "403": { description: Forbidden }
+        "500": { description: Internal server error }
+
+  /api/jobs/{id}:
+    get:
+      summary: Get a job by ID
+      security: [ { oauth2: [jobs:read] } ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Job
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { description: Unauthorized }
+        "403": { description: Forbidden }
+        "404":
+          description: Not found
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
+  /api/jobs/search:
+    post:
+      summary: Search jobs (by created_at and statuses), paged
+      description: >
+        Filters by created_at range and/or a list of statuses. If neither
+        filter is provided, all jobs in the organization are returned,
+        subject to pagination. Sorting supports a computed field
+      security: [ { oauth2: [jobs:read] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JobQueryRequest" }
+      responses:
+        "200":
+          description: Jobs page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobQueryResponse" }
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { description: Unauthorized }
+        "403": { description: Forbidden }
+
+  /api/documents/extraction_results/search:
+    post:
+      summary: Query extraction results by selectors (paged)
+      description: >
+        Returns documents matched by `selectors` together with **nullable** extraction
+        fields for the specified project (LEFT JOIN). A `projectSelector` **must** be
+        present in `selectors.include`; otherwise servers SHOULD return 400.
+      security:
+        - oauth2: [documents:read, extraction:read]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExtractionResultsQueryRequest"
+      responses:
+        "200":
+          description: Document extraction results page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtractionResultsQueryResponse"
+        "400":
+          description: Bad request (e.g., missing projectSelector)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { description: Unauthorized }
+        "403": { description: Forbidden }   
+
+
+
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://dev-noabnisxxguu0jp0.us.auth0.com/oauth/token
+          scopes:
+            files:upload: Plan file uploads using presigned URLs
+            documents:read: Read documents
+            documents:write: Delete documents
+            projects:read: Read projects
+            projects:write: Create and modify projects
+            prompts:read: Read extractor prompts
+            jobs:write: Start workflow jobs
+            jobs:read: Read workflow jobs
+            extraction:read: Read extraction results
+
+  schemas:
+    BatchUploadRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        files:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/UploadFile"
+      required: [files]
+
+    UploadFile:
+      type: object
+      additionalProperties: false
+      properties:
+        file_name:
+          type: string
+          maxLength: 2048
+        content_type:
+          type: string
+          maxLength: 255
+        size:
+          type: integer
+          minimum: 1
+          maximum: 524288000   # 500 MB cap
+      required: [file_name, content_type, size]
+
+    BatchUploadResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/UploadItem'
+
+    UploadItem:
+      type: object
+      additionalProperties: false
+      required: [client_file_name]
+      properties:
+        client_file_name:
+          type: string
+        # present on success
+        key:
+          type: string
+          description: raw/<org>/<file_name>
+        upload_mode:
+          type: string
+          description: "Currently 'single'; reserved for 'multipart' later"
+        put_url:
+          type: string
+          format: uri
+        required_headers:
+          type: object
+          additionalProperties: { type: string }
+        expires_at:
+          type: string
+          format: date-time
+        # present on failure; null or omitted on success
+        error:
+          allOf: [ { $ref: '#/components/schemas/UploadError' } ]
+          nullable: true
+
+    UploadError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - FILE_TOO_LARGE
+            - INVALID_FILENAME
+            - INVALID_SIZE
+            - NOT_AUTHORIZED
+            - QUOTA_EXCEEDED
+            - SIGN_URL_FAILED
+            - INTERNAL
+        message:
+          type: string
+        file_size:
+          type: integer
+        max_size:
+          type: integer
+        retryable:
+          type: boolean
+
+    # ---------- Storage-compatible selector set ----------
+    Selectors:
+      type: object
+      additionalProperties: false
+      description: >
+        Selector groups for documents.
+        - If omitted, or both `include` and `exclude` are empty, **no filters** are applied.
+        - `include` combines different selector **types** with logical AND.
+        - `exclude` removes matches (each exclusion is combined with AND).
+        - Each list (`include` and `exclude`) may contain **at most one** selector of each `type`
+          (the same `type` may appear once in `include` **and** once in `exclude`).
+        - **Time windows in `tagSelector` are inclusive on both ends** (`tagged_from` ≤ ts ≤ `tagged_to`)
+          and operate on the `document_tags.created_at` timestamp.
+      properties:
+        include:
+          type: array
+          items: { $ref: '#/components/schemas/Selector' }
+          default: []
+        exclude:
+          type: array
+          items: { $ref: '#/components/schemas/Selector' }
+          default: []
+      x-go-type: infstorage.Selectors
+      x-go-type-import:
+        path: github.com/InferSoft-inc/infer-lib/storage
+        name: infstorage
+
+    Selector:
+      oneOf:
+        - $ref: '#/components/schemas/ProjectSelector'
+        - $ref: '#/components/schemas/FileSelector'
+        - $ref: '#/components/schemas/TagSelector'
+        - $ref: '#/components/schemas/DocumentClassSelector'
+        - $ref: '#/components/schemas/CreatedAtSelector'
+        - $ref: '#/components/schemas/NameSelector'
+        - $ref: '#/components/schemas/SourceDocumentSelector'
+        - $ref: '#/components/schemas/HasRunningWorkflowSelector'
+        - $ref: '#/components/schemas/IsValidSelector'
+        - $ref: '#/components/schemas/PageCountSelector'
+        - $ref: '#/components/schemas/SizeSelector'
+        - $ref: '#/components/schemas/JobSelector'      
+        - $ref: '#/components/schemas/HasChildrenSelector' 
+      discriminator:
+        propertyName: type
+        mapping:
+          projectSelector:            '#/components/schemas/ProjectSelector'
+          fileSelector:               '#/components/schemas/FileSelector'
+          tagSelector:                '#/components/schemas/TagSelector'
+          documentClassSelector:      '#/components/schemas/DocumentClassSelector'
+          createdAtSelector:          '#/components/schemas/CreatedAtSelector'
+          nameSelector:               '#/components/schemas/NameSelector'
+          sourceDocumentSelector:     '#/components/schemas/SourceDocumentSelector'
+          hasRunningWorkflowSelector: '#/components/schemas/HasRunningWorkflowSelector'
+          isValidSelector:            '#/components/schemas/IsValidSelector'
+          pageCountSelector:          '#/components/schemas/PageCountSelector'
+          sizeSelector:               '#/components/schemas/SizeSelector'
+          jobSelector:                '#/components/schemas/JobSelector'           
+          hasChildrenSelector:        '#/components/schemas/HasChildrenSelector'
+      x-go-type: infstorage.Selector
+      x-go-type-import:
+        path: github.com/InferSoft-inc/infer-lib/storage
+        name: infstorage 
+
+    ProjectSelector:
+      type: object
+      additionalProperties: false
+      required: [type, project_id]
+      properties:
+        type:
+          type: string
+          enum: [projectSelector]
+        project_id:
+          type: integer
+          minimum: 1
+        linked_from:
+          description: Inclusive lower bound (UTC) on when the document was linked to the project (`project_documents.created_at`).
+          anyOf:
+            - { type: string, format: date-time }
+            - { type: string, format: date }
+        linked_to:
+          description: Inclusive upper bound (UTC) on when the document was linked to the project (`project_documents.created_at`).
+          anyOf:
+            - { type: string, format: date-time }
+            - { type: string, format: date }
+      description: >
+        Select documents already linked to the given project.
+        When a time window is provided, the link must satisfy:
+        - only `linked_from`: `created_at >= linked_from`
+        - only `linked_to`:   `created_at <= linked_to`
+        - both provided:      `linked_from <= created_at <= linked_to` (both **inclusive**).
+      examples:
+        include_window_inclusive:
+          summary: Include docs linked to project 123 during Mar 1–4 (inclusive)
+          value:
+            type: projectSelector
+            project_id: 123
+            linked_from: "2024-03-01T00:00:00Z"
+            linked_to:   "2024-03-04T23:59:59Z"
+        exclude_at_upper_edge:
+          summary: Exclude docs linked exactly at the 'to' boundary
+          value:
+            type: projectSelector
+            project_id: 123
+            linked_from: "2024-03-02T12:00:00Z"
+            linked_to:   "2024-03-04T12:00:00Z"  
+
+    FileSelector:
+      type: object
+      additionalProperties: false
+      required: [type, files]
+      properties:
+        type:
+          type: string
+          enum: [fileSelector]
+        files:
+          type: array
+          minItems: 1
+          items: { type: integer, minimum: 1 }
+      description: Select documents by explicit document IDs.
+
+    TagSelector:
+      type: object
+      additionalProperties: false
+      required: [type, tags]
+      properties:
+        type:
+          type: string
+          enum: [tagSelector]
+        tags:
+          type: array
+          minItems: 1
+          items: { type: integer, minimum: 1 }
+        tagged_from:
+          description: Inclusive lower bound (UTC) on when the tag relation was created (`document_tags.created_at`).
+          anyOf:
+            - { type: string, format: date-time }
+            - { type: string, format: date }
+        tagged_to:
+          description: Inclusive upper bound (UTC) on when the tag relation was created (`document_tags.created_at`).
+          anyOf:
+            - { type: string, format: date-time }
+            - { type: string, format: date }
+      description: >
+        Select documents that have at least one of the provided tag IDs.
+        When a time window is provided, the match also requires the tag relation to have
+        `document_tags.created_at` within the window. Bound semantics:
+        - If only `tagged_from` is provided: select where `created_at >= tagged_from`.
+        - If only `tagged_to`   is provided: select where `created_at <= tagged_to`.
+        - If both are provided: select where `tagged_from <= created_at <= tagged_to` (both **inclusive**).
+      examples:
+        include_inclusive_window:
+          summary: Include docs tagged with 42 during March 1–4 (inclusive)
+          value:
+            type: tagSelector
+            tags: [42]
+            tagged_from: "2024-03-01T00:00:00Z"
+            tagged_to:   "2024-03-04T23:59:59Z"
+        exclude_upper_bound_edge:
+          summary: Exclude docs tagged with 7 exactly at the 'to' boundary
+          value:
+            type: tagSelector
+            tags: [7]
+            tagged_from: "2024-03-02T12:00:00Z"
+            tagged_to:   "2024-03-04T12:00:00Z"  
+
+    DocumentClassSelector:
+      type: object
+      additionalProperties: false
+      required: [type, classes]
+      properties:
+        type:
+          type: string
+          enum: [documentClassSelector]
+        classes:
+          type: array
+          minItems: 1
+          items: { type: string, minLength: 1 }
+      description: Select documents classified with any of the given class names.
+
+    CreatedAtSelector:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [createdAtSelector]
+        created_from:
+          description: Inclusive lower bound (UTC). Accepts RFC3339 or date-only (YYYY-MM-DD).
+          anyOf:
+            - { type: string, format: date-time }
+            - { type: string, format: date }
+        created_to:
+          description: Exclusive upper bound (UTC). Accepts RFC3339 or date-only (YYYY-MM-DD).
+          anyOf:
+            - { type: string, format: date-time }
+            - { type: string, format: date }
+      description: Filter by document creation time (from inclusive, to exclusive). At least one of `created_from` or `created_to` is required.
+
+    NameSelector:
+      type: object
+      additionalProperties: false
+      required: [type, name]
+      properties:
+        type:
+          type: string
+          enum: [nameSelector]
+        name:
+          type: string
+          minLength: 1
+      description: Case-insensitive substring match on document name.
+
+    SourceDocumentSelector:
+      type: object
+      additionalProperties: false
+      required: [type, source_documents]
+      properties:
+        type:
+          type: string
+          enum: [sourceDocumentSelector]
+        source_documents:
+          type: array
+          minItems: 1
+          items: { type: integer, minimum: 1 }
+      description: Select documents by their `source_document` (e.g., derived pages/parts of a parent).
+
+    HasRunningWorkflowSelector:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [hasRunningWorkflowSelector]
+      description: Select documents that currently have a workflow run in progress. Payload-less.
+
+    IsValidSelector:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [isValidSelector]
+      description: Select documents where `is_valid = true`. Payload-less.
+
+    PageCountSelector:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [pageCountSelector]
+        page_count_from:
+          type: integer
+          minimum: 0
+          description: Inclusive lower bound
+        page_count_to:
+          type: integer
+          minimum: 0
+          description: Exclusive upper bound
+      anyOf:
+        - required: [page_count_from]
+        - required: [page_count_to]
+      description: Filter by page count. At least one of `page_count_from` or `page_count_to` is required.
+
+    SizeSelector:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [sizeSelector]
+        size_from:
+          type: integer
+          minimum: 0
+          description: Inclusive lower bound in bytes
+        size_to:
+          type: integer
+          minimum: 0
+          description: Exclusive upper bound in bytes
+      anyOf:
+        - required: [size_from]
+        - required: [size_to]
+      description: Filter by file size (bytes). At least one of `size_from` or `size_to` is required.
+
+    JobSelector:
+      type: object
+      additionalProperties: false
+      required: [type, jobs]
+      properties:
+        type:
+          type: string
+          enum: [jobSelector]
+        jobs:
+          type: array
+          minItems: 1
+          items: { type: integer, minimum: 1 }
+      description: >
+        Select documents linked to any of the provided Job IDs.
+        In `include`, returns documents associated with those jobs.
+        In `exclude`, removes documents associated with those jobs.
+        (Backed by the document–job linkage created by the orchestrator.)
+
+    HasChildrenSelector:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [hasChildrenSelector]
+      description: >
+        Payload-less selector.
+        In `include`, returns only documents that have at least one child
+        (i.e., rows where an entry exists with `source_document = documents.id`).
+        In `exclude`, removes documents that have children (leaving only leaf docs).
+
+    DocumentQueryRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        selectors:
+          $ref: "#/components/schemas/Selectors"
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+        order_by:
+          type: string
+          enum: [id, created_at, name, file_size, page_count, is_valid, source_document]
+          default: id
+        order_dir:
+          type: string
+          enum: [asc, desc]
+          default: asc
+
+    DocumentSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        id:              { type: integer }
+        organization_id:  { type: string }
+        name:            { type: string }
+        file_size:        { type: integer, nullable: true }
+        page_count:       { type: integer, nullable: true }
+        is_valid:         { type: boolean }
+        source_document:  { type: integer, nullable: true }
+        created_at:       { type: string, format: date-time }
+        has_active_workflow:
+          type: boolean
+          description: True if there is a workflow currently running for this document
+        document_class:
+          type: string
+          nullable: true
+          description: Classification result for this document, if present.  
+      required: [id, organization_id, name, is_valid, created_at, has_active_workflow]
+
+    DocumentQueryResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/DocumentSummary" }
+        page:
+          type: integer
+        page_size:
+          type: integer
+        has_more:
+          type: boolean
+      required: [items, page, page_size, has_more]
+
+    Project:
+      type: object
+      additionalProperties: false
+      properties:
+        id:             { type: integer }
+        organization_id: { type: string }
+        name:           { type: string }
+        deleted:        { type: boolean }
+        created_at:      { type: string, format: date-time }
+      required: [id, organization_id, name, deleted, created_at]
+
+    ProjectCreateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:     { type: string, minLength: 1, maxLength: 255 }
+      required: [name]
+
+    ProjectQueryRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        q:
+          type: string
+          description: Case-insensitive fuzzy search on project name
+          minLength: 1
+        include_deleted: { type: boolean, default: false }
+        page:           { type: integer, minimum: 1, default: 1 }
+        page_size:       { type: integer, minimum: 1, maximum: 100, default: 50 }
+        order_by:
+          type: string
+          enum: [id, created_at, name, deleted]
+          default: id
+        order_dir:
+          type: string
+          enum: [asc, desc]
+          default: asc
+
+    ProjectQueryResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Project" }
+        page:     { type: integer }
+        page_size: { type: integer }
+        has_more:  { type: boolean }
+      required: [items, page, page_size, has_more]
+
+    AssignDocumentsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        project: { $ref: "#/components/schemas/Project" }
+        matched: { type: integer }
+        added:   { type: integer }
+        skipped: { type: integer }
+      required: [project, matched, added, skipped]
+
+    PromptMeta:
+      type: object
+      additionalProperties: false
+      properties:
+        id:             { type: integer }
+        organization_id: { type: string }
+        name:           { type: string }
+        description:    { type: string, nullable: true }
+        data_type:       { type: string }
+        document_class:  { type: string }
+        user_id:         { type: string, nullable: true }
+        deleted:        { type: boolean }
+        created_at:      { type: string, format: date-time }
+        updated_at:      { type: string, format: date-time }
+      required: [id, organization_id, name, data_type, document_class, deleted, created_at, updated_at]
+
+    PromptQueryRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        q:              { type: string, description: "Case-insensitive fuzzy search on prompt name", minLength: 1 }
+        document_class:  { type: string, minLength: 1 }
+        include_deleted: { type: boolean, default: false }
+        page:           { type: integer, minimum: 1, default: 1 }
+        page_size:       { type: integer, minimum: 1, maximum: 100, default: 50 }
+        order_by:
+          type: string
+          enum: [id, created_at, name, deleted]
+          default: name
+        order_dir:
+          type: string
+          enum: [asc, desc]
+          default: asc
+
+    PromptQueryResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PromptMeta" }
+        page:     { type: integer }
+        page_size: { type: integer }
+        has_more:  { type: boolean }
+      required: [items, page, page_size, has_more]
+
+    Step:
+      type: string
+      enum: [splitter, classifier, extractor]
+
+    WorkflowSpec:
+      type: object
+      description: >
+        Common workflow parameters.
+        **Single-stage only** for now.
+        For jobs, invalid documents, files > 500MB, or page_count > 3000 are filtered out.
+        Synchronous jobs have a limit of 100 documents.
+      properties:
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 1         
+          items: { $ref: "#/components/schemas/Step" }
+          description: Single-stage only.
+        selectors:
+          $ref: "#/components/schemas/Selectors"
+        prompts:
+          type: array
+          items: { type: integer, minimum: 1 }
+          description: Required when the single step is `extractor`.
+        synchronous:
+          type: boolean
+          default: false
+      required: [steps, selectors, synchronous]
+
+    CreditsEstimateRequest:     
+      allOf:
+        - $ref: "#/components/schemas/WorkflowSpec"
+
+    StartJobRequest:
+      type: object
+      additionalProperties: false
+      description: >
+        Starts a job from a previously-computed credits estimate identified by `credits_id`.
+        If the credited run's single step is `extractor`, a valid  **project_id MUST** be provided (all extraction results are asociated with a project).
+      properties:
+        credits_id:
+          type: string
+          minLength: 1
+          description: ID returned by `/api/jobs/credits/estimate`.
+        project_id:
+          type: integer
+          minimum: 1
+          description: Required when the credited single step is `extractor` (see note above).
+      required: [credits_id]
+
+    CreditsEstimateResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        total_credits: { type: integer }
+        page_count:    { type: integer }
+        id:           { type: string, description: "Tracking ID stored by Orchestrator" }
+      required: [total_credits, page_count, id]
+
+    Job:
+      type: object
+      additionalProperties: false
+      properties:
+        id:                { type: integer }
+        organization_id:    { type: string }
+        organization_name:  { type: string }
+        total_docs:         { type: integer }
+        completed_docs:     { type: integer }
+        error_count:        { type: integer }
+        status:            { $ref: "#/components/schemas/JobStatus" }
+        project_id:         { type: integer, nullable: true }
+        stages:
+          type: array
+          items: { type: string }
+        selectors:
+          allOf: [ { $ref: "#/components/schemas/Selectors" } ]
+          nullable: true
+        credits:           { type: integer, nullable: true }
+        createdAt:         { type: string, format: date-time }
+      required:
+        [id, organization_id, organization_name, total_docs, completed_docs, error_count, status, stages, createdAt]
+
+    JobStatus:
+      type: string
+      description: Job lifecycle state
+      enum:
+        - running
+        - completed
+        - failed
+        - partial_success
+        - creating_workflows
+
+    JobQueryRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        created_from:
+          description: Inclusive lower bound (UTC). Accepts RFC3339 or date-only (YYYY-MM-DD).
+          anyOf:
+            - { type: string, format: date-time }
+            - { type: string, format: date }
+        created_to:
+          description: Exclusive upper bound (UTC). Accepts RFC3339 or date-only (YYYY-MM-DD).
+          anyOf:
+            - { type: string, format: date-time }
+            - { type: string, format: date }
+        statuses:
+          type: array
+          description: Optional filter; if omitted or empty, all statuses are returned.
+          items: { $ref: "#/components/schemas/JobStatus" }
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+        order_by:
+          type: string
+          enum: [id, created_at, error_count, total_docs, completed_docs]
+          default: id
+        order_dir:
+          type: string
+          enum: [asc, desc]
+          default: desc
+
+    JobQueryResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Job" }
+        page:
+          type: integer
+        page_size:
+          type: integer
+        has_more:
+          type: boolean
+      required: [items, page, page_size, has_more]
+
+    ExtractionResultsQueryRequest:
+      type: object
+      additionalProperties: false
+      description: >
+        Selectors are applied to **documents**; extraction fields are joined by
+        `(document_id, project_id)`. A `projectSelector` must be present in `include`.
+        Documents without an extraction row are still returned with all extraction
+        fields as `null`.
+      properties:
+        selectors:
+          $ref: "#/components/schemas/Selectors"
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+        order_by:
+          type: string
+          enum: [id, created_at, name, file_size, page_count, is_valid, source_document]
+          default: id
+        order_dir:
+          type: string
+          enum: [asc, desc]
+          default: asc
+      required: [selectors]
+
+    DocumentWithExtraction:
+      type: object
+      additionalProperties: false
+      description: Document plus (nullable) extraction fields for the selected project.
+      properties:
+        id:               { type: integer }
+        organization_id:  { type: string }
+        name:             { type: string }
+        file_size:        { type: integer, nullable: true }
+        page_count:       { type: integer, nullable: true }
+        source_document:  { type: integer, nullable: true }
+        created_at:       { type: string, format: date-time }
+        extraction_result_id:
+          type: integer
+          nullable: true
+          description: Extraction row ID for (document, project), if present.
+        extraction_created_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the extraction row was created.
+        extraction_body:
+          nullable: true
+          description: Result of the extraction.
+          oneOf:
+            - type: object
+            - type: array
+              items: {}
+      required: [id, organization_id, name, created_at]
+
+    ExtractionResultsQueryResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/DocumentWithExtraction" }
+        page:      { type: integer }
+        page_size: { type: integer }
+        has_more:  { type: boolean }
+      required: [items, page, page_size, has_more]
+
+    DocumentBulkDeleteRequest:
+      type: object
+      additionalProperties: false
+      description: >
+        Bulk delete request. `selectors` are applied to **documents**, using the
+        same semantics as `/api/documents/search`. Servers reject
+        requests where `selectors` is omitted or both `include` and `exclude`
+        are empty to avoid deleting all documents unintentionally.
+      properties:
+        selectors:
+          $ref: "#/components/schemas/Selectors"
+        dry_run:
+          type: boolean
+          default: false
+          description: >
+            If true, it only returns how many
+            documents *would* be deleted.
+      required: [selectors]
+
+    DocumentBulkDeleteResponse:
+      type: object
+      additionalProperties: false
+      description: Result of a bulk delete operation (or dry run).
+      properties:
+        matched:
+          type: integer
+          description: Total documents that matched the selectors.
+        dry_run:
+          type: boolean
+          description: True if the request was executed in dry-run mode.
+      required: [matched, dry_run]
+
+    Problem:
+      type: object
+      description: RFC 7807 problem details
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string, format: uri }
+      required: [title, status]

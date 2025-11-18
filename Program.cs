@@ -113,7 +113,8 @@ namespace Examples
             {
                 Console.WriteLine("Waiting 5 minutes before polling job status...");
                 await Task.Delay(5 * 60 * 1000); // 5 minutes
-                var jobStatusResponse = await apiClient.GetFromJsonAsync<StartJobsResponse>($"jobs/{startJobResponse.Id}");
+                var jobStatusResponse = await apiClient.GetFromJsonAsync<StartJobsResponse>(
+                    $"jobs/{startJobResponse.Id}");
                 if (jobStatusResponse == null)
                     throw new Exception("Failed to get job status.");
                 Console.WriteLine($"Job Status: {jobStatusResponse.Status}");
@@ -149,6 +150,34 @@ namespace Examples
             );
             await File.WriteAllTextAsync("extraction_results.json", JsonSerializer.Serialize(extractionsResponse, new JsonSerializerOptions { WriteIndented = true }));
             Console.WriteLine("Saved classifier_results.json and extraction_results.json to disk.");
+
+            // Optional: dry-run a bulk delete to show which documents would be removed
+            var bulkDeleteRequest = new DocumentBulkDeleteRequest
+            {
+                Selectors = new Selectors
+                {
+                    Include = new Selector[]
+                    {
+                        new ProjectSelector { ProjectId = projectResponse.Id }
+                    }
+                },
+                DryRun = true
+            };
+
+            var bulkDeleteResponse = await PostJsonAsync<DocumentBulkDeleteRequest, DocumentBulkDeleteResponse>(
+                apiClient,
+                "documents/bulk_delete",
+                bulkDeleteRequest
+            );
+            Console.WriteLine($"Bulk delete dry-run matched {bulkDeleteResponse.Matched} documents (dryRun={bulkDeleteResponse.DryRun}).");
+            // Now we can delete the documents
+            bulkDeleteRequest.DryRun = false;
+            bulkDeleteResponse = await PostJsonAsync<DocumentBulkDeleteRequest, DocumentBulkDeleteResponse>(
+                apiClient,
+                "documents/bulk_delete",
+                bulkDeleteRequest
+            );
+            Console.WriteLine($"Bulk delete completed. Matched {bulkDeleteResponse.Matched} documents.");
         }
 
 
@@ -186,7 +215,6 @@ namespace Examples
 
         /// <summary>
         /// Generic helper to POST JSON and parse JSON response.
-        /// Avoids repetitive boilerplate everywhere.
         /// </summary>
         private static async Task<TResponse?> PostJsonAsync<TRequest, TResponse>(
             HttpClient client,
@@ -196,9 +224,7 @@ namespace Examples
             var response = await client.PostAsJsonAsync(url, body);
             response.EnsureSuccessStatusCode();
 
-            return await response.Content.ReadFromJsonAsync<TResponse>(
-                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }
-            );
+            return await response.Content.ReadFromJsonAsync<TResponse>();
         }
 
         /// <summary>

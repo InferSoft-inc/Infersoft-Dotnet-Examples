@@ -55,4 +55,16 @@ namespace Examples.Model
         public int PageCount { get; set; }
         public int SourceDocument { get; set; }
     }
+
+    internal class DocumentBulkDeleteRequest
+    {
+        public required Selectors Selectors { get; set; }
+        public bool DryRun { get; set; }
+    }
+
+    internal class DocumentBulkDeleteResponse
+    {
+        public int Matched { get; set; }
+        public bool DryRun { get; set; }
+    }
 }
