@@ -49,6 +49,7 @@ namespace Examples
 
             // Make the request to get presigned URLs
             Console.WriteLine("Requesting presigned URLs from Infersoft API...");
+            Console.WriteLine($"Upload request with headers: {JsonSerializer.Serialize(uploadRequest, new JsonSerializerOptions { WriteIndented = true })}");
             var uploadResponse = await PostJsonAsync<UploadRequest, UploadResponse>(apiClient, "uploads", uploadRequest);
             if (uploadResponse == null || uploadResponse.Items.Count != pdfFiles.Count)
                 throw new Exception("Upload response is invalid or does not match the number of files.");
