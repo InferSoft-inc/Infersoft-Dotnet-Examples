@@ -24,6 +24,13 @@ namespace Examples
             TypeInfoResolver = new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver()
         };
 
+        private static readonly JsonSerializerOptions IndentedSerializeOptions = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            WriteIndented = true,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        };
+
         static async Task Main(string[] args)
         {
             TryLoadDotEnv();
@@ -254,7 +261,7 @@ namespace Examples
                     Selectors = projectSelectors
                 }
             );
-            await File.WriteAllTextAsync("classifier_results.json", JsonSerializer.Serialize(documentsResponse, new JsonSerializerOptions { WriteIndented = true }));
+            await File.WriteAllTextAsync("classifier_results.json", JsonSerializer.Serialize(documentsResponse, IndentedSerializeOptions));
             // Extraction results
             Console.WriteLine("Querying extraction results scoped to the newly created project...");
             var extractionsResponse = await PostJsonAsync<DocumentsSearchRequest, ExtractionResponse>(
@@ -265,7 +272,7 @@ namespace Examples
                     Selectors = projectSelectors
                 }
             );
-            await File.WriteAllTextAsync("extraction_results.json", JsonSerializer.Serialize(extractionsResponse, new JsonSerializerOptions { WriteIndented = true }));
+            await File.WriteAllTextAsync("extraction_results.json", JsonSerializer.Serialize(extractionsResponse, IndentedSerializeOptions));
             Console.WriteLine("Saved classifier_results.json and extraction_results.json to disk.");
 
             // Optional: dry-run a bulk delete to show which documents would be removed
