@@ -23,15 +23,15 @@ namespace Examples.Model
     internal class DocumentItem
     {
         public DateTime CreatedAt { get; set; }
-        public string DocumentClass { get; set; }
-        public long FileSize { get; set; }
+        public string? DocumentClass { get; set; }
+        public long? FileSize { get; set; }
         public bool HasActiveWorkflow { get; set; }
         public int Id { get; set; }
         public bool IsValid { get; set; }
         public string Name { get; set; }
         public string OrganizationId { get; set; }
-        public int PageCount { get; set; }
-        public int SourceDocument { get; set; }
+        public int? PageCount { get; set; }
+        public int? SourceDocument { get; set; }
     }
 
     internal class ExtractionResponse
@@ -45,15 +45,15 @@ namespace Examples.Model
     internal class ExtractionItem
     {
         public DateTime CreatedAt { get; set; }
-        public Dictionary<string, object> ExtractionBody { get; set; }
-        public DateTime ExtractionCreatedAt { get; set; }
-        public int ExtractionResultId { get; set; }
-        public long FileSize { get; set; }
+        public object? ExtractionBody { get; set; }
+        public DateTime? ExtractionCreatedAt { get; set; }
+        public int? ExtractionResultId { get; set; }
+        public long? FileSize { get; set; }
         public int Id { get; set; }
         public string Name { get; set; }
         public string OrganizationId { get; set; }
-        public int PageCount { get; set; }
-        public int SourceDocument { get; set; }
+        public int? PageCount { get; set; }
+        public int? SourceDocument { get; set; }
     }
 
     internal class DocumentBulkDeleteRequest

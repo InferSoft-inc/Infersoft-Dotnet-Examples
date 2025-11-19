@@ -94,7 +94,9 @@ namespace Examples
 
                 Console.WriteLine($"Uploaded {pdfFile} successfully.");
             }
-
+            Console.WriteLine("Uploaded all files successfully.");
+            // Wait a little bit to let the files be processed, 10s should be enough
+            await Task.Delay(10 * 1000);
             // Create a project first to organize the documents
             Console.WriteLine("Creating example project to host this job...");
             var projectResponse = await PostJsonAsync<CreateProjectRequest, CreateProjectResponse>(
@@ -143,7 +145,8 @@ namespace Examples
                 Prompts = Array.Empty<int>(), 
                 Selectors = projectSelectors,
                 Steps = new[] { "classifier" },
-                Synchronous = false
+                Synchronous = true // We use true here because it's just a handful of documents
+                // For bigger jobs you should use false here and wait for longer than 2 minutes between polls
             };
 
             var classifyCreditsEstimate = await PostJsonAsync<EstimateCreditsRequest, EstimateCreditsResponse>(
@@ -171,8 +174,8 @@ namespace Examples
             Console.WriteLine("Monitoring classification job status until completion...");
             while (true)
             {
-                Console.WriteLine("Waiting 5 minutes before polling job status...");
-                await Task.Delay(5 * 60 * 1000); // 5 minutes
+                Console.WriteLine("Waiting 2 minutes before polling job status...");
+                await Task.Delay(2 * 60 * 1000); // 2 minutes
                 var jobStatusResponse = await apiClient.GetFromJsonAsync<StartJobsResponse>(
                     $"jobs/{classifyJobResponse.Id}");
                 if (jobStatusResponse == null)
@@ -209,7 +212,8 @@ namespace Examples
                 Prompts = availablePromptIds,
                 Selectors = projectSelectors,
                 Steps = new[] { "extractor" },
-                Synchronous = false
+                Synchronous = true // Again: true here because it's just a handful of documents
+                // For bigger jobs you should use false here and wait for longer than 2 minutes between polls
             };
 
             var extractCreditsEstimate = await PostJsonAsync<EstimateCreditsRequest, EstimateCreditsResponse>(
@@ -237,8 +241,8 @@ namespace Examples
             Console.WriteLine("Monitoring extraction job status until completion...");
             while (true)
             {
-                Console.WriteLine("Waiting 5 minutes before polling job status...");
-                await Task.Delay(5 * 60 * 1000); // 5 minutes
+                Console.WriteLine("Waiting 2 minutes before polling job status...");
+                await Task.Delay(2 * 60 * 1000); // 2 minutes
                 var jobStatusResponse = await apiClient.GetFromJsonAsync<StartJobsResponse>(
                     $"jobs/{extractJobResponse.Id}");
                 if (jobStatusResponse == null)
