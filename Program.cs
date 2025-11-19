@@ -335,27 +335,17 @@ namespace Examples
             string url,
             TRequest body)
         {
-            // Serialize to string first to get Content-Length instead of chunked encoding
             var jsonContent = JsonSerializer.Serialize(body, SerializeOptions);
-            
             using var content = new StringContent(jsonContent, System.Text.Encoding.UTF8, "application/json");
             var response = await client.PostAsync(url, content);
             var request = response.RequestMessage;
 
-            Console.WriteLine($"Request: {request}");
-            Console.WriteLine($"Request Headers: {request?.Headers}");
             if (request?.Content != null)
             {
                 Console.WriteLine($"Request Content: {await request.Content.ReadAsStringAsync()}");
             }
 
             var responseBody = await response.Content.ReadAsStringAsync();
-            Console.WriteLine($"Response Status: {(int)response.StatusCode} ({response.StatusCode})");
-            Console.WriteLine($"Response Headers: {response.Headers}");
-            Console.WriteLine($"Response Content-Headers: {response.Content.Headers}");
-            Console.WriteLine($"Response Content: {responseBody}");
-            Console.WriteLine($"Response Content Length: {responseBody?.Length ?? 0}");
-
             if (!response.IsSuccessStatusCode)
             {
                 throw new HttpRequestException(
