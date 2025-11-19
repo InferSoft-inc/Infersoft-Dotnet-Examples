@@ -11,6 +11,19 @@ namespace Examples
         private const string Auth0BaseUrl = "https://dev-noabnisxxguu0jp0.us.auth0.com";
         private const string ApiBaseUrl = "https://api.infersoft.com/api/";
 
+        // Serialization options: snake_case naming, ignore nulls
+        private static readonly JsonSerializerOptions SerializeOptions = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        };
+        private static readonly JsonSerializerOptions DeserializeOptions = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            PropertyNameCaseInsensitive = true,
+            TypeInfoResolver = new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver()
+        };
+
         static async Task Main(string[] args)
         {
             TryLoadDotEnv();
@@ -32,6 +45,8 @@ namespace Examples
             // Set up
             apiClient.DefaultRequestHeaders.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            apiClient.DefaultRequestHeaders.Add("Accept", "application/json");
+            apiClient.DefaultRequestHeaders.Add("User-Agent", "infersoft-dotnet-examples/1.0");
 
             // Let's upload some files
             // We need to know their names and sizes ahead of time
@@ -49,7 +64,6 @@ namespace Examples
 
             // Make the request to get presigned URLs
             Console.WriteLine("Requesting presigned URLs from Infersoft API...");
-            Console.WriteLine($"Upload request with headers: {JsonSerializer.Serialize(uploadRequest, new JsonSerializerOptions { WriteIndented = true })}");
             var uploadResponse = await PostJsonAsync<UploadRequest, UploadResponse>(apiClient, "uploads", uploadRequest);
             if (uploadResponse == null || uploadResponse.Items.Count != pdfFiles.Count)
                 throw new Exception("Upload response is invalid or does not match the number of files.");
@@ -74,69 +88,160 @@ namespace Examples
                 Console.WriteLine($"Uploaded {pdfFile} successfully.");
             }
 
-            // All files uploaded, let's send these files to classify and extract
-            // We'll use a NameSelector here but the API will improve in the future
-            // We need to get credits estimate before sending the job
-            // Then we can approve and send the job with the proposed budget ID
-            var nameSelectors = uploadResponse.Items
-                .Select(i => new NameSelector { Name = i.ClientFileName })
-                .ToArray();
-            Console.WriteLine("Building selectors from uploaded filenames...");
-            var selectors = new Selectors
-            {
-                Include = nameSelectors
-            };
-
-            var budgetRequest = new EstimateCreditsRequest
-            {
-                Prompts = new[] { 1, 2, 3, 4 },
-                Selectors = selectors,
-                Steps = new[] { "classify", "extract" },
-                Synchronous = false
-            };
-
-            Console.WriteLine("Requesting credit estimate for classify/extract steps...");
-            var creditsEstimate = await PostJsonAsync<EstimateCreditsRequest, EstimateCreditsResponse>(
-                apiClient,
-                "job/credits/estimate",
-                budgetRequest
-            ) ?? throw new Exception("Budget response was null.");
-            // Display whole estimate response
-            Console.WriteLine($"Estimated credits for job: {creditsEstimate.TotalCredits} over {creditsEstimate.PageCount} pages. ID for Estimate {creditsEstimate.Id}");
-            // Create a project to run this job under
+            // Create a project first to organize the documents
             Console.WriteLine("Creating example project to host this job...");
             var projectResponse = await PostJsonAsync<CreateProjectRequest, CreateProjectResponse>(
                 apiClient,
                 "projects",
                 new CreateProjectRequest { Name = "Example Project from C# SDK" }
             ) ?? throw new Exception("Project creation failed.");
-            // Finally we can submit the job with the budget ID
-            Console.WriteLine("Starting job with approved budget and project...");
-            var startJobResponse = await PostJsonAsync<StartJobsRequest, StartJobsResponse>(
+
+            // Assign the uploaded documents to the project
+            // We'll use NameSelector with a common substring in the filenames
+            // Since all files are named "doc_X.pdf", we can match on "doc_"
+            Console.WriteLine("Assigning uploaded documents to the project...");
+            var assignRequest = new AssignDocumentsRequest
+            {
+                ProjectId = projectResponse.Id,
+                Selectors = new Selectors
+                {
+                    Include = new Selector[]
+                    {
+                        new NameSelector { Name = "doc_" }
+                    }
+                }
+            };
+
+            var assignResponse = await PostJsonAsync<AssignDocumentsRequest, AssignDocumentsResponse>(
+                apiClient,
+                "projects/assign-documents",
+                assignRequest
+            ) ?? throw new Exception("Document assignment failed.");
+
+            Console.WriteLine($"Assigned {assignResponse.Added} documents to project (matched: {assignResponse.Matched}, skipped: {assignResponse.Skipped})");
+
+            // Use ProjectSelector to select all documents that will be processed
+            var projectSelectors = new Selectors
+            {
+                Include = new Selector[]
+                {
+                    new ProjectSelector { ProjectId = projectResponse.Id }
+                }
+            };
+
+            // Step 1: Classification Job
+            Console.WriteLine("Step 1: Requesting credit estimate for classification...");
+            var classifyBudgetRequest = new EstimateCreditsRequest
+            {
+                Prompts = Array.Empty<int>(), 
+                Selectors = projectSelectors,
+                Steps = new[] { "classifier" },
+                Synchronous = false
+            };
+
+            var classifyCreditsEstimate = await PostJsonAsync<EstimateCreditsRequest, EstimateCreditsResponse>(
+                apiClient,
+                "jobs/credits/estimate",
+                classifyBudgetRequest
+            ) ?? throw new Exception("Classification budget response was null.");
+            
+            Console.WriteLine($"Estimated credits for classification: {classifyCreditsEstimate.TotalCredits} over {classifyCreditsEstimate.PageCount} pages. ID: {classifyCreditsEstimate.Id}");
+
+            // Start classification job
+            Console.WriteLine("Starting classification job...");
+            var classifyJobResponse = await PostJsonAsync<StartJobsRequest, StartJobsResponse>(
                 apiClient,
                 "jobs/start",
                 new StartJobsRequest
                 {
-                    CreditsId = creditsEstimate.Id,
+                    CreditsId = classifyCreditsEstimate.Id,
                     ProjectId = projectResponse.Id
                 }
-            ) ?? throw new Exception("Job start response was null.");
-            Console.WriteLine($"Started job with ID: {startJobResponse.Id}");
-            // Poll for the job status until it's completed using the GET /jobs/{id} endpoint
-            // It answers with the same model as the StartJobsResponse so we can reuse the class
-            Console.WriteLine("Monitoring job status until completion...");
+            ) ?? throw new Exception("Classification job start response was null.");
+            Console.WriteLine($"Started classification job with ID: {classifyJobResponse.Id}");
+
+            // Poll for classification job completion
+            Console.WriteLine("Monitoring classification job status until completion...");
             while (true)
             {
                 Console.WriteLine("Waiting 5 minutes before polling job status...");
                 await Task.Delay(5 * 60 * 1000); // 5 minutes
                 var jobStatusResponse = await apiClient.GetFromJsonAsync<StartJobsResponse>(
-                    $"jobs/{startJobResponse.Id}");
+                    $"jobs/{classifyJobResponse.Id}");
                 if (jobStatusResponse == null)
-                    throw new Exception("Failed to get job status.");
-                Console.WriteLine($"Job Status: {jobStatusResponse.Status}");
+                    throw new Exception("Failed to get classification job status.");
+                Console.WriteLine($"Classification Job Status: {jobStatusResponse.Status}");
                 if (jobStatusResponse.Status == "completed")
                     break;
-                Console.WriteLine("Job not completed yet, continuing to poll...");
+                if (jobStatusResponse.Status == "failed")
+                    throw new Exception("Classification job failed.");
+                Console.WriteLine("Classification job not completed yet, continuing to poll...");
+            }
+
+            // Step 2: Extraction Job
+            // First, query available prompts
+            Console.WriteLine("Querying available prompts for extraction...");
+            var promptsResponse = await PostJsonAsync<PromptQueryRequest, PromptQueryResponse>(
+                apiClient,
+                "prompts/search",
+                new PromptQueryRequest { PageSize = 10 }
+            );
+            
+            if (promptsResponse == null || promptsResponse.Items.Count == 0)
+            {
+                Console.WriteLine("No prompts available. Skipping extraction step.");
+                return;
+            }
+            
+            var availablePromptIds = promptsResponse.Items.Select(p => p.Id).Take(4).ToArray();
+            Console.WriteLine($"Using prompts: {string.Join(", ", availablePromptIds)}");
+            
+            Console.WriteLine("Step 2: Requesting credit estimate for extraction...");
+            var extractBudgetRequest = new EstimateCreditsRequest
+            {
+                Prompts = availablePromptIds,
+                Selectors = projectSelectors,
+                Steps = new[] { "extractor" },
+                Synchronous = false
+            };
+
+            var extractCreditsEstimate = await PostJsonAsync<EstimateCreditsRequest, EstimateCreditsResponse>(
+                apiClient,
+                "jobs/credits/estimate",
+                extractBudgetRequest
+            ) ?? throw new Exception("Extraction budget response was null.");
+            
+            Console.WriteLine($"Estimated credits for extraction: {extractCreditsEstimate.TotalCredits} over {extractCreditsEstimate.PageCount} pages. ID: {extractCreditsEstimate.Id}");
+
+            // Start extraction job
+            Console.WriteLine("Starting extraction job...");
+            var extractJobResponse = await PostJsonAsync<StartJobsRequest, StartJobsResponse>(
+                apiClient,
+                "jobs/start",
+                new StartJobsRequest
+                {
+                    CreditsId = extractCreditsEstimate.Id,
+                    ProjectId = projectResponse.Id
+                }
+            ) ?? throw new Exception("Extraction job start response was null.");
+            Console.WriteLine($"Started extraction job with ID: {extractJobResponse.Id}");
+
+            // Poll for extraction job completion
+            Console.WriteLine("Monitoring extraction job status until completion...");
+            while (true)
+            {
+                Console.WriteLine("Waiting 5 minutes before polling job status...");
+                await Task.Delay(5 * 60 * 1000); // 5 minutes
+                var jobStatusResponse = await apiClient.GetFromJsonAsync<StartJobsResponse>(
+                    $"jobs/{extractJobResponse.Id}");
+                if (jobStatusResponse == null)
+                    throw new Exception("Failed to get extraction job status.");
+                Console.WriteLine($"Extraction Job Status: {jobStatusResponse.Status}");
+                if (jobStatusResponse.Status == "completed")
+                    break;
+                if (jobStatusResponse.Status == "failed")
+                    throw new Exception("Extraction job failed.");
+                Console.WriteLine("Extraction job not completed yet, continuing to poll...");
             }
             // Let's retrieve all the results and save them to disk
             // Saving classifier results and extraction results separately
@@ -146,7 +251,7 @@ namespace Examples
                 "documents/search",
                 new DocumentsSearchRequest
                 {
-                    Selectors = selectors
+                    Selectors = projectSelectors
                 }
             );
             await File.WriteAllTextAsync("classifier_results.json", JsonSerializer.Serialize(documentsResponse, new JsonSerializerOptions { WriteIndented = true }));
@@ -157,13 +262,7 @@ namespace Examples
                 "documents/extraction_results/search",
                 new DocumentsSearchRequest
                 {
-                    Selectors = new Selectors
-                    {
-                        Include = new Selector[]
-                        {
-                            new ProjectSelector { ProjectId = projectResponse.Id }
-                        }
-                    }
+                    Selectors = projectSelectors
                 }
             );
             await File.WriteAllTextAsync("extraction_results.json", JsonSerializer.Serialize(extractionsResponse, new JsonSerializerOptions { WriteIndented = true }));
@@ -173,13 +272,7 @@ namespace Examples
             Console.WriteLine("Preparing dry-run bulk delete to preview cleanup...");
             var bulkDeleteRequest = new DocumentBulkDeleteRequest
             {
-                Selectors = new Selectors
-                {
-                    Include = new Selector[]
-                    {
-                        new ProjectSelector { ProjectId = projectResponse.Id }
-                    }
-                },
+                Selectors = projectSelectors,
                 DryRun = true
             };
 
@@ -235,16 +328,47 @@ namespace Examples
 
         /// <summary>
         /// Generic helper to POST JSON and parse JSON response.
+        /// Uses StringContent to avoid chunked transfer encoding which CloudFront blocks.
         /// </summary>
         private static async Task<TResponse?> PostJsonAsync<TRequest, TResponse>(
             HttpClient client,
             string url,
             TRequest body)
         {
-            var response = await client.PostAsJsonAsync(url, body);
-            response.EnsureSuccessStatusCode();
+            // Serialize to string first to get Content-Length instead of chunked encoding
+            var jsonContent = JsonSerializer.Serialize(body, SerializeOptions);
+            
+            using var content = new StringContent(jsonContent, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PostAsync(url, content);
+            var request = response.RequestMessage;
 
-            return await response.Content.ReadFromJsonAsync<TResponse>();
+            Console.WriteLine($"Request: {request}");
+            Console.WriteLine($"Request Headers: {request?.Headers}");
+            if (request?.Content != null)
+            {
+                Console.WriteLine($"Request Content: {await request.Content.ReadAsStringAsync()}");
+            }
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"Response Status: {(int)response.StatusCode} ({response.StatusCode})");
+            Console.WriteLine($"Response Headers: {response.Headers}");
+            Console.WriteLine($"Response Content-Headers: {response.Content.Headers}");
+            Console.WriteLine($"Response Content: {responseBody}");
+            Console.WriteLine($"Response Content Length: {responseBody?.Length ?? 0}");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException(
+                    $"Request to '{request?.RequestUri}' failed with status {(int)response.StatusCode} ({response.StatusCode}). Body: {responseBody}");
+            }
+
+            if (string.IsNullOrWhiteSpace(responseBody))
+            {
+                throw new HttpRequestException(
+                    $"Request to '{request?.RequestUri}' returned empty body with status {(int)response.StatusCode}. Headers: {response.Headers}");
+            }
+
+            return JsonSerializer.Deserialize<TResponse>(responseBody, DeserializeOptions);
         }
 
         /// <summary>

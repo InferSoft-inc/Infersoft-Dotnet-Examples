@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Examples.Model
 {
     internal class StartJobsRequest
@@ -16,7 +18,10 @@ namespace Examples.Model
         public string OrganizationId { get; set; } = string.Empty;
         public string OrganizationName { get; set; } = string.Empty;
         public int ProjectId { get; set; }
-        public Selectors Selectors { get; set; } = new();
+        
+        [JsonIgnore]
+        public Selectors? Selectors { get; set; }
+        
         public string[] Stages { get; set; } = Array.Empty<string>();
         public string Status { get; set; } = string.Empty;
         public int TotalDocs { get; set; }

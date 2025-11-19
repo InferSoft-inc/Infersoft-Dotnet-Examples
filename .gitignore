@@ -362,3 +362,5 @@ MigrationBackup/
 FodyWeavers.xsd
 .env
 examples/.env
+classifier_results.json
+extraction_results.json
