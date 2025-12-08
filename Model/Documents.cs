@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Examples.Model
 {
     internal class DocumentsSearchRequest

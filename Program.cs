@@ -1,6 +1,5 @@
-﻿using DotNetEnv;
+using DotNetEnv;
 using Examples.Model;
-using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 
@@ -142,7 +141,7 @@ namespace Examples
             Console.WriteLine("Step 1: Requesting credit estimate for classification...");
             var classifyBudgetRequest = new EstimateCreditsRequest
             {
-                Prompts = Array.Empty<int>(), 
+                Prompts = Array.Empty<int>(),
                 Selectors = projectSelectors,
                 Steps = new[] { "classifier" },
                 Synchronous = true // We use true here because it's just a handful of documents
@@ -154,7 +153,7 @@ namespace Examples
                 "jobs/credits/estimate",
                 classifyBudgetRequest
             ) ?? throw new Exception("Classification budget response was null.");
-            
+
             Console.WriteLine($"Estimated credits for classification: {classifyCreditsEstimate.TotalCredits} over {classifyCreditsEstimate.PageCount} pages. ID: {classifyCreditsEstimate.Id}");
 
             // Start classification job
@@ -196,16 +195,16 @@ namespace Examples
                 "prompts/search",
                 new PromptQueryRequest { PageSize = 10 }
             );
-            
+
             if (promptsResponse == null || promptsResponse.Items.Count == 0)
             {
                 Console.WriteLine("No prompts available. Skipping extraction step.");
                 return;
             }
-            
+
             var availablePromptIds = promptsResponse.Items.Select(p => p.Id).Take(4).ToArray();
             Console.WriteLine($"Using prompts: {string.Join(", ", availablePromptIds)}");
-            
+
             Console.WriteLine("Step 2: Requesting credit estimate for extraction...");
             var extractBudgetRequest = new EstimateCreditsRequest
             {
@@ -221,7 +220,7 @@ namespace Examples
                 "jobs/credits/estimate",
                 extractBudgetRequest
             ) ?? throw new Exception("Extraction budget response was null.");
-            
+
             Console.WriteLine($"Estimated credits for extraction: {extractCreditsEstimate.TotalCredits} over {extractCreditsEstimate.PageCount} pages. ID: {extractCreditsEstimate.Id}");
 
             // Start extraction job
@@ -414,7 +413,8 @@ namespace Examples
                     ContentType = "application/pdf",
                     FileName = Path.GetFileName(path),
                     Size = new FileInfo(path).Length
-                }).ToList()
+                }).ToList(),
+                ProjectName = "C# SDK Project"
             };
 
             return uploadRequest;
