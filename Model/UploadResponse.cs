@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace Examples.Model
 {
     internal class UploadResponse
