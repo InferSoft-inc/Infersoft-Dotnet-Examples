@@ -94,46 +94,20 @@ namespace Examples
                 Console.WriteLine($"Uploaded {pdfFile} successfully.");
             }
             Console.WriteLine("Uploaded all files successfully.");
-            // Wait a little bit to let the files be processed, 10s should be enough
-            await Task.Delay(10 * 1000);
-            // Create a project first to organize the documents
-            Console.WriteLine("Creating example project to host this job...");
-            var projectResponse = await PostJsonAsync<CreateProjectRequest, CreateProjectResponse>(
-                apiClient,
-                "projects",
-                new CreateProjectRequest { Name = "Example Project from C# SDK" }
-            ) ?? throw new Exception("Project creation failed.");
 
-            // Assign the uploaded documents to the project
-            // We'll use NameSelector with a common substring in the filenames
-            // Since all files are named "doc_X.pdf", we can match on "doc_"
-            Console.WriteLine("Assigning uploaded documents to the project...");
-            var assignRequest = new AssignDocumentsRequest
-            {
-                ProjectId = projectResponse.Id,
-                Selectors = new Selectors
-                {
-                    Include = new Selector[]
-                    {
-                        new NameSelector { Name = "doc_" }
-                    }
-                }
-            };
+            // Extract project ID from upload response
+            if (uploadResponse.Project == null)
+                throw new Exception("Upload response does not contain project information.");
 
-            var assignResponse = await PostJsonAsync<AssignDocumentsRequest, AssignDocumentsResponse>(
-                apiClient,
-                "projects/assign-documents",
-                assignRequest
-            ) ?? throw new Exception("Document assignment failed.");
-
-            Console.WriteLine($"Assigned {assignResponse.Added} documents to project (matched: {assignResponse.Matched}, skipped: {assignResponse.Skipped})");
+            var projectId = uploadResponse.Project.Id;
+            Console.WriteLine($"Files uploaded to project ID: {projectId} ({uploadResponse.Project.Name})");
 
             // Use ProjectSelector to select all documents that will be processed
             var projectSelectors = new Selectors
             {
                 Include = new Selector[]
                 {
-                    new ProjectSelector { ProjectId = projectResponse.Id }
+                    new ProjectSelector { ProjectId = projectId }
                 }
             };
 
@@ -164,7 +138,7 @@ namespace Examples
                 new StartJobsRequest
                 {
                     CreditsId = classifyCreditsEstimate.Id,
-                    ProjectId = projectResponse.Id
+                    ProjectId = projectId
                 }
             ) ?? throw new Exception("Classification job start response was null.");
             Console.WriteLine($"Started classification job with ID: {classifyJobResponse.Id}");
@@ -231,7 +205,7 @@ namespace Examples
                 new StartJobsRequest
                 {
                     CreditsId = extractCreditsEstimate.Id,
-                    ProjectId = projectResponse.Id
+                    ProjectId = projectId
                 }
             ) ?? throw new Exception("Extraction job start response was null.");
             Console.WriteLine($"Started extraction job with ID: {extractJobResponse.Id}");
