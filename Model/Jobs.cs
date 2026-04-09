@@ -5,7 +5,7 @@ namespace Examples.Model
     internal class StartJobsRequest
     {
         public required string CreditsId { get; set; }
-        public required int ProjectId { get; set; }
+        public int? ProjectId { get; set; }
     }
 
     internal class StartJobsResponse
@@ -17,8 +17,8 @@ namespace Examples.Model
         public int Id { get; set; }
         public string OrganizationId { get; set; } = string.Empty;
         public string OrganizationName { get; set; } = string.Empty;
-        public int ProjectId { get; set; }
-        
+        public int? ProjectId { get; set; }
+
         [JsonIgnore]
         public Selectors? Selectors { get; set; }
         

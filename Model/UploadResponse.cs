@@ -11,11 +11,20 @@ namespace Examples.Model
     {
         public string ClientFileName { get; set; } = string.Empty;
         public int DocumentId { get; set; }
-        public string Error { get; set; } = string.Empty;
+        public UploadError? Error { get; set; }
         public DateTime ExpiresAt { get; set; }
         public string PutUrl { get; set; } = string.Empty;
         public Dictionary<string, string> RequiredHeaders { get; set; } = new();
         public string UploadMode { get; set; } = string.Empty;
+    }
+
+    internal class UploadError
+    {
+        public string Code { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public long? FileSize { get; set; }
+        public long? MaxSize { get; set; }
+        public bool? Retryable { get; set; }
     }
 
     internal class Project

@@ -54,60 +54,50 @@ namespace Examples
             apiClient.DefaultRequestHeaders.Add("Accept", "application/json");
             apiClient.DefaultRequestHeaders.Add("User-Agent", "infersoft-dotnet-examples/1.0");
 
-            // Let's upload some files
-            // We need to know their names and sizes ahead of time
-            // In the repository we have 3 pdfs
-            // We start by fetching the presigned URL from Infersoft API
-            var pdfFiles = new List<string>
+            // ── Upload Phase ──
+            // Upload all 3 files in one batch with a single tag.
+            // We use this tag with TagSelector to target documents for classification and extraction.
+
+            var projectName = $"C# SDK Project {DateTime.UtcNow:yyyyMMdd-HHmmss}";
+            var pdfFiles = new List<string> { "docs/doc_1.pdf", "docs/doc_2.pdf", "docs/doc_3.pdf" };
+
+            // Clean up any leftover documents from previous runs with the same file names
+            var allFileNames = pdfFiles.Select(Path.GetFileName).ToList();
+            await DeleteExistingDocumentsByName(apiClient, allFileNames!);
+
+            // ── Upload all files with a single tag ──
+            Console.WriteLine($"Uploading {pdfFiles.Count} files with tag 'example-run' to project '{projectName}'...");
+            var uploadRequest = new UploadRequest
             {
-                "docs/doc_1.pdf",
-                "docs/doc_2.pdf",
-                "docs/doc_3.pdf"
+                Files = pdfFiles.Select(path => new UploadFile
+                {
+                    ContentType = "application/pdf",
+                    FileName = Path.GetFileName(path),
+                    Size = new FileInfo(path).Length
+                }).ToList(),
+                ProjectName = projectName,
+                TagIds = new List<int>(),
+                TagNames = new List<string> { "example-run" }
             };
 
-            Console.WriteLine("Preparing upload request for local PDF samples...");
-            var uploadRequest = BuildUploadRequestFromFiles(pdfFiles);
+            var uploadResponse = await PostJsonAsync<UploadRequest, UploadResponse>(apiClient, "uploads", uploadRequest)
+                ?? throw new Exception("Upload response was null.");
 
-            // Make the request to get presigned URLs
-            Console.WriteLine("Requesting presigned URLs from Infersoft API...");
-            var uploadResponse = await PostJsonAsync<UploadRequest, UploadResponse>(apiClient, "uploads", uploadRequest);
-            if (uploadResponse == null || uploadResponse.Items.Count != pdfFiles.Count)
-                throw new Exception("Upload response is invalid or does not match the number of files.");
-            Console.WriteLine("Received presigned URLs. Beginning uploads.");
+            await UploadFilesToPresignedUrls(pdfFiles, uploadResponse.Items);
+            Console.WriteLine("All files uploaded successfully.");
 
-            // Now we have the presigned URLs and the names of the files that will be uploaded
-            // We can proceed to upload each file to its corresponding presigned URL
-            // In here we have to inject the required headers returned by the API
-            for (int i = 0; i < pdfFiles.Count; i++)
-            {
-                var pdfFile = pdfFiles[i];
-                var uploadItem = uploadResponse.Items[i];
+            var tagId = uploadResponse.Tags.First(t => t.Name == "example-run").Id;
+            var projectId = uploadResponse.Project?.Id
+                ?? throw new Exception("Upload response did not contain project information.");
+            Console.WriteLine($"Tag ID: {tagId}, Project ID: {projectId}");
 
-                Console.WriteLine($"Uploading {pdfFile} to {uploadItem.PutUrl}");
-
-                await UploadFileAsync(
-                    uploadItem.PutUrl,
-                    pdfFile,
-                    uploadItem.RequiredHeaders
-                );
-
-                Console.WriteLine($"Uploaded {pdfFile} successfully.");
-            }
-            Console.WriteLine("Uploaded all files successfully.");
-
-            // Extract project ID from upload response
-            if (uploadResponse.Project == null)
-                throw new Exception("Upload response does not contain project information.");
-
-            var projectId = uploadResponse.Project.Id;
-            Console.WriteLine($"Files uploaded to project ID: {projectId} ({uploadResponse.Project.Name})");
-
-            // Use ProjectSelector to select all documents that will be processed
-            var projectSelectors = new Selectors
+            // ── Selector ──
+            // Single TagSelector to target all uploaded documents
+            var tagSelectors = new Selectors
             {
                 Include = new Selector[]
                 {
-                    new ProjectSelector { ProjectId = projectId }
+                    new TagSelector { Tags = new[] { tagId } }
                 }
             };
 
@@ -116,10 +106,9 @@ namespace Examples
             var classifyBudgetRequest = new EstimateCreditsRequest
             {
                 Prompts = Array.Empty<int>(),
-                Selectors = projectSelectors,
+                Selectors = tagSelectors,
                 Steps = new[] { "classifier" },
-                Synchronous = true // We use true here because it's just a handful of documents
-                // For bigger jobs you should use false here and wait for longer than 2 minutes between polls
+                Synchronous = true // We use true here, setting it to false is half price but takes up to 24h
             };
 
             var classifyCreditsEstimate = await PostJsonAsync<EstimateCreditsRequest, EstimateCreditsResponse>(
@@ -137,8 +126,7 @@ namespace Examples
                 "jobs/start",
                 new StartJobsRequest
                 {
-                    CreditsId = classifyCreditsEstimate.Id,
-                    ProjectId = projectId
+                    CreditsId = classifyCreditsEstimate.Id
                 }
             ) ?? throw new Exception("Classification job start response was null.");
             Console.WriteLine($"Started classification job with ID: {classifyJobResponse.Id}");
@@ -179,14 +167,14 @@ namespace Examples
             var availablePromptIds = promptsResponse.Items.Select(p => p.Id).Take(4).ToArray();
             Console.WriteLine($"Using prompts: {string.Join(", ", availablePromptIds)}");
 
-            Console.WriteLine("Step 2: Requesting credit estimate for extraction...");
+            // ── Step 2: Extraction (documents selected via TagSelector) ──
+            Console.WriteLine($"Step 2: Extracting documents with tag 'example-run' (tag ID {tagId})...");
             var extractBudgetRequest = new EstimateCreditsRequest
             {
                 Prompts = availablePromptIds,
-                Selectors = projectSelectors,
+                Selectors = tagSelectors,
                 Steps = new[] { "extractor" },
-                Synchronous = true // Again: true here because it's just a handful of documents
-                // For bigger jobs you should use false here and wait for longer than 2 minutes between polls
+                Synchronous = true
             };
 
             var extractCreditsEstimate = await PostJsonAsync<EstimateCreditsRequest, EstimateCreditsResponse>(
@@ -228,25 +216,34 @@ namespace Examples
                 Console.WriteLine("Extraction job not completed yet, continuing to poll...");
             }
             // Let's retrieve all the results and save them to disk
-            // Saving classifier results and extraction results separately
-            Console.WriteLine("Querying classifier results for the uploaded documents...");
+            // Classification results: all 3 documents (project-wide)
+            Console.WriteLine("Querying classifier results for ALL uploaded documents...");
             var documentsResponse = await PostJsonAsync<DocumentsSearchRequest, DocumentsSearchResponse>(
                 apiClient,
                 "documents/search",
                 new DocumentsSearchRequest
                 {
-                    Selectors = projectSelectors
+                    Selectors = tagSelectors
                 }
             );
             await File.WriteAllTextAsync("classifier_results.json", JsonSerializer.Serialize(documentsResponse, IndentedSerializeOptions));
-            // Extraction results
-            Console.WriteLine("Querying extraction results scoped to the newly created project...");
+
+            // Extraction results — this endpoint requires a projectSelector in include
+            Console.WriteLine("Querying extraction results scoped to 'example-run' tag...");
+            var extractionSelectors = new Selectors
+            {
+                Include = new Selector[]
+                {
+                    new TagSelector { Tags = new[] { tagId } },
+                    new ProjectSelector { ProjectId = projectId }
+                }
+            };
             var extractionsResponse = await PostJsonAsync<DocumentsSearchRequest, ExtractionResponse>(
                 apiClient,
                 "documents/extraction_results/search",
                 new DocumentsSearchRequest
                 {
-                    Selectors = projectSelectors
+                    Selectors = extractionSelectors
                 }
             );
             await File.WriteAllTextAsync("extraction_results.json", JsonSerializer.Serialize(extractionsResponse, IndentedSerializeOptions));
@@ -256,7 +253,7 @@ namespace Examples
             Console.WriteLine("Preparing dry-run bulk delete to preview cleanup...");
             var bulkDeleteRequest = new DocumentBulkDeleteRequest
             {
-                Selectors = projectSelectors,
+                Selectors = tagSelectors,
                 DryRun = true
             };
 
@@ -378,20 +375,61 @@ namespace Examples
             }
         }
 
-        private static UploadRequest BuildUploadRequestFromFiles(IEnumerable<string> pdfFilePaths)
+        /// <summary>
+        /// Uploads each local file to its corresponding presigned URL.
+        /// </summary>
+        private static async Task UploadFilesToPresignedUrls(
+            List<string> localPaths,
+            List<UploadItem> uploadItems)
         {
-            var uploadRequest = new UploadRequest
-            {
-                Files = pdfFilePaths.Select(path => new UploadFile
-                {
-                    ContentType = "application/pdf",
-                    FileName = Path.GetFileName(path),
-                    Size = new FileInfo(path).Length
-                }).ToList(),
-                ProjectName = "C# SDK Project"
-            };
+            if (uploadItems.Count != localPaths.Count)
+                throw new Exception("Upload response item count does not match the number of files.");
 
-            return uploadRequest;
+            for (int i = 0; i < localPaths.Count; i++)
+            {
+                var path = localPaths[i];
+                var item = uploadItems[i];
+                if (item.Error != null)
+                    throw new Exception($"Upload failed for {item.ClientFileName}: [{item.Error.Code}] {item.Error.Message}");
+                if (string.IsNullOrEmpty(item.PutUrl))
+                    throw new Exception($"No presigned URL returned for {item.ClientFileName}.");
+                Console.WriteLine($"  Uploading {path} → {item.PutUrl}");
+                await UploadFileAsync(item.PutUrl, path, item.RequiredHeaders);
+            }
+        }
+
+        /// <summary>
+        /// Searches for documents matching the given file names and deletes them.
+        /// Prevents "duplicate file" errors when re-running the example.
+        /// </summary>
+        private static async Task DeleteExistingDocumentsByName(
+            HttpClient apiClient,
+            List<string> fileNames)
+        {
+            foreach (var name in fileNames)
+            {
+                var searchResponse = await PostJsonAsync<DocumentsSearchRequest, DocumentsSearchResponse>(
+                    apiClient,
+                    "documents/search",
+                    new DocumentsSearchRequest
+                    {
+                        Selectors = new Selectors
+                        {
+                            Include = new Selector[] { new NameSelector { Name = name } }
+                        }
+                    }
+                );
+
+                if (searchResponse?.Items == null || searchResponse.Items.Count == 0)
+                    continue;
+
+                foreach (var doc in searchResponse.Items)
+                {
+                    Console.WriteLine($"Cleaning up existing document: {doc.Name} (ID {doc.Id})");
+                    var resp = await apiClient.DeleteAsync($"documents/{doc.Id}");
+                    resp.EnsureSuccessStatusCode();
+                }
+            }
         }
 
         private static void TryLoadDotEnv()

@@ -12,6 +12,8 @@ namespace Examples.Model
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
     [JsonDerivedType(typeof(NameSelector), "nameSelector")]
     [JsonDerivedType(typeof(ProjectSelector), "projectSelector")]
+    [JsonDerivedType(typeof(TagSelector), "tagSelector")]
+    [JsonDerivedType(typeof(DocumentClassSelector), "documentClassSelector")]
     internal abstract class Selector
     {
         [JsonIgnore]
@@ -30,7 +32,26 @@ namespace Examples.Model
     {
         [JsonIgnore]
         public override string Type => "projectSelector";
-        
+
         public required int ProjectId { get; set; }
+    }
+
+    internal sealed class TagSelector : Selector
+    {
+        [JsonIgnore]
+        public override string Type => "tagSelector";
+
+        public required int[] Tags { get; set; }
+
+        public DateTime? TaggedFrom { get; set; }
+        public DateTime? TaggedTo { get; set; }
+    }
+
+    internal sealed class DocumentClassSelector : Selector
+    {
+        [JsonIgnore]
+        public override string Type => "documentClassSelector";
+
+        public required string[] Classes { get; set; }
     }
 }
